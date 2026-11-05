@@ -34,6 +34,16 @@ Run the seed script with the environment active:
 python .\seed_data.py
 ```
 
+The script generates a repeatable set of 200 products, matching datasheets and
+certificates, three policies, and three tenders with 15–20 distinct product
+requirements each. Tenders include Yes, Partly, and No cases; their expected
+results and evidence are written to `data/tender_answer_key.xlsx`. It upserts
+generated products and removes only obsolete sample product codes in the
+`TN-LAP-*`, `TN-MON-*`, and `TN-OFF-*` namespaces; it does not drop the
+products table. PostgreSQL connection settings default to the values in
+`docker-compose.yml` and can be overridden with `PGHOST`, `PGPORT`,
+`PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
+
 The `.venv` folder is local to this checkout and is excluded from Git. Repeat
 the setup commands on each computer; do not copy the environment between
 computers.
