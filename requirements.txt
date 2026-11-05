@@ -1,0 +1,55 @@
+# =====================================================================
+# TechNest Assist - Master Requirements
+# =====================================================================
+
+# --- Core Framework & Environment ---
+python-dotenv>=1.0.1
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# --- LLMs & Cloud APIs ---
+groq>=0.5.0
+ollama>=0.1.7
+
+# --- Database & Vector Storage ---
+psycopg2-binary>=2.9.9
+qdrant-client>=1.8.0
+sqlalchemy>=2.0.28
+
+# --- Embeddings & Machine Learning ---
+sentence-transformers>=2.5.1
+torch>=2.2.0
+numpy>=1.26.0
+
+# --- File Generation & Parsing ---
+faker>=24.0.0
+fpdf2>=2.7.8
+python-docx>=1.1.0
+pandas>=2.2.1
+openpyxl>=3.1.2
+pypdf>=4.1.0
+
+# --- Agent Orchestration & Protocol ---
+langgraph>=0.0.26
+langchain>=0.1.12
+mcp>=0.1.0
+
+# --- Web Backend & UI ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+streamlit>=1.32.0
+requests>=2.31.0
+
+# --- Email Integration ---
+google-api-python-client>=2.122.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.0
+
+# --- Observability & Evaluation ---
+langfuse>=2.20.0
+ragas>=0.1.5
+prometheus-client>=0.20.0
+
+# --- Code Quality & Testing ---
+pytest>=8.1.0
+black>=24.2.0
