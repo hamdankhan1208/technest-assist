@@ -44,6 +44,35 @@ products table. PostgreSQL connection settings default to the values in
 `docker-compose.yml` and can be overridden with `PGHOST`, `PGPORT`,
 `PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
 
+## LLM providers
+
+When `GROQ_API_KEY` is set in the environment, the example uses Groq first. If
+the Groq request fails, it reports the failure and falls back to local Ollama.
+If the key is not set, it uses Ollama directly. Keep the API key out of source
+control.
+
+Set `GROQ_API_KEY` in your PowerShell session or user environment to enable the
+Groq path. Set `GROQ_MODEL` to select another Groq model; the default is
+`openai/gpt-oss-120b`.
+
+Install and start Ollama, and make sure the `llama3.2:1b` model is available
+for local use or as a fallback:
+
+```powershell
+ollama run llama3.2:1b
+```
+
+After confirming the model responds, exit the interactive session with `/bye`.
+Run the Python example using the project environment:
+
+```powershell
+.\.venv\Scripts\python.exe .\first_llm_call.py
+```
+
+To use a different model already installed in Ollama, set `OLLAMA_MODEL` in
+PowerShell before running the example, for example
+`$env:OLLAMA_MODEL = "llama3.2"`.
+
 The `.venv` folder is local to this checkout and is excluded from Git. Repeat
 the setup commands on each computer; do not copy the environment between
 computers.
