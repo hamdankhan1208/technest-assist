@@ -1,26 +1,43 @@
 # TechNest Assist
 
-## Set up Python on Windows
+TechNest Assist is a prototype AI assistant for a technology retailer. The
+repository currently contains a repeatable sample-data generator and a small
+LLM connectivity example using Groq with local Ollama fallback.
 
-The virtual environment keeps this project's Python libraries in the project
-folder, so installing them does not require administrator rights. Install
-Python 3.12 for your Windows user (not for all users) first. Python 3.15 does
-not yet have Windows wheels for every dependency, which can make pip try to
-build packages using administrator-level C++ tools. A virtual environment does
-not include the Python interpreter.
+> **Project status:** The customer-support application and policy-grounded
+> retrieval (RAG) flow are not implemented yet. The LLM example is a smoke test,
+> not a source-grounded customer-support system.
 
-If `.venv` was already created with another Python version, deactivate it and
-remove that `.venv` folder before recreating it. Then open PowerShell in this
-project folder and run:
+## Current capabilities
 
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
+- Start PostgreSQL, Qdrant, and Mailpit locally with Docker Compose.
+- Generate sample product records, product datasheets, policy documents,
+  certificates, and tender documents.
+- Call a Groq chat model when configured, with Ollama as a fallback.
+- Run tests for LLM provider selection and fallback behavior.
 
-If PowerShell blocks activation, use the environment's Python directly instead:
+## Technology
+
+- Python
+- PostgreSQL
+- Qdrant
+- Groq API and Ollama
+- Docker Compose
+
+## Prerequisites
+
+- Python 3.12
+- Docker Desktop with Docker Compose
+- Ollama, if you want to use the local model or Groq fallback
+- A Groq API key, if you want to use Groq (optional)
+
+The full `requirements.txt` includes machine-learning packages such as PyTorch
+and sentence-transformers, so the initial installation may take some time and
+disk space.
+
+## Setup
+
+In PowerShell, from the repository root:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -28,51 +45,95 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Run the seed script with the environment active:
+Start the local services:
 
 ```powershell
-python .\seed_data.py
+docker compose up -d
 ```
 
-The script generates a repeatable set of 200 products, matching datasheets and
-certificates, three policies, and three tenders with 15–20 distinct product
-requirements each. Tenders include Yes, Partly, and No cases; their expected
-results and evidence are written to `data/tender_answer_key.xlsx`. It upserts
-generated products and removes only obsolete sample product codes in the
-`TN-LAP-*`, `TN-MON-*`, and `TN-OFF-*` namespaces; it does not drop the
-products table. PostgreSQL connection settings default to the values in
-`docker-compose.yml` and can be overridden with `PGHOST`, `PGPORT`,
-`PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
+The services are available at:
 
-## LLM providers
+| Service | Address |
+| --- | --- |
+| PostgreSQL | `localhost:5432` |
+| Qdrant HTTP API | `http://localhost:6333` |
+| Qdrant gRPC | `localhost:6334` |
+| Mailpit web UI | `http://localhost:8025` |
+| Mailpit SMTP | `localhost:1025` |
 
-When `GROQ_API_KEY` is set in the environment, the example uses Groq first. If
-the Groq request fails, it reports the failure and falls back to local Ollama.
-If the key is not set, it uses Ollama directly. Keep the API key out of source
-control.
-
-Set `GROQ_API_KEY` in your PowerShell session or user environment to enable the
-Groq path. Set `GROQ_MODEL` to select another Groq model; the default is
-`openai/gpt-oss-120b`.
-
-Install and start Ollama, and make sure the `llama3.2:1b` model is available
-for local use or as a fallback:
+## Generate sample data
 
 ```powershell
-ollama run llama3.2:1b
+.\.venv\Scripts\python.exe .\seed_data.py
 ```
 
-After confirming the model responds, exit the interactive session with `/bye`.
-Run the Python example using the project environment:
+The script generates 200 sample products, product datasheets, three policy
+documents, certificates, and three tender documents with 15–20 requirements
+each. It also writes expected tender answers to
+`data/tender_answer_key.xlsx` and upserts product records in PostgreSQL.
+
+The seed script uses the PostgreSQL settings below by default. Override them
+with environment variables if your local database uses different values:
+
+| Variable | Default |
+| --- | --- |
+| `PGHOST` | `localhost` |
+| `PGPORT` | `5432` |
+| `PGDATABASE` | `technest_db` |
+| `PGUSER` | `technest_user` |
+| `PGPASSWORD` | `technest_password` |
+
+## Run the LLM example
+
+### Groq
+
+Set your API key in the current PowerShell session, then run the example:
 
 ```powershell
+$env:GROQ_API_KEY = "your-groq-api-key"
 .\.venv\Scripts\python.exe .\first_llm_call.py
 ```
 
-To use a different model already installed in Ollama, set `OLLAMA_MODEL` in
-PowerShell before running the example, for example
-`$env:OLLAMA_MODEL = "llama3.2"`.
+The default Groq model is `openai/gpt-oss-120b`. To select another model, set
+`GROQ_MODEL` before running the script.
 
-The `.venv` folder is local to this checkout and is excluded from Git. Repeat
-the setup commands on each computer; do not copy the environment between
-computers.
+### Ollama
+
+Install Ollama, download the default model, and run the example:
+
+```powershell
+ollama pull llama3.2:1b
+.\.venv\Scripts\python.exe .\first_llm_call.py
+```
+
+When `GROQ_API_KEY` is not set, the script uses Ollama directly. If a Groq
+request fails, it reports the error and tries Ollama. The default local model
+is `llama3.2:1b`; set `OLLAMA_MODEL` to use another model already installed in
+Ollama.
+
+## Run tests
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+## Repository layout
+
+```text
+.
+├── data/                 # Generated sample documents and spreadsheets
+├── tests/                # Automated tests
+├── docker-compose.yml    # Local PostgreSQL, Qdrant, and Mailpit services
+├── first_llm_call.py     # Groq/Ollama connectivity example
+├── requirements.txt      # Python dependencies
+└── seed_data.py          # Sample data and database seeding
+```
+
+## Important notes
+
+- The credentials in `docker-compose.yml` are for local development only. Do
+  not use them in a production deployment.
+- The seed script updates generated products in the `TN-LAP-*`, `TN-MON-*`,
+  and `TN-OFF-*` sample-code namespaces. It does not drop the products table.
+- Generated data and local database contents are for development and testing;
+  they are not production catalog or policy data.
