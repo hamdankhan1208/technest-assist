@@ -4,9 +4,9 @@ TechNest Assist is a prototype AI assistant for a technology retailer. The
 repository currently contains a repeatable sample-data generator and a small
 LLM connectivity example using Groq with local Ollama fallback.
 
-> **Project status:** The customer-support application and policy-grounded
-> retrieval (RAG) flow are not implemented yet. The LLM example is a smoke test,
-> not a source-grounded customer-support system.
+> **Project status:** Policy-grounded retrieval (RAG) is implemented as a
+> command-line milestone. The broader customer-support application is still in
+> development; the standalone LLM example remains a smoke test.
 
 ## Current capabilities
 
@@ -14,6 +14,8 @@ LLM connectivity example using Groq with local Ollama fallback.
 - Generate sample product records, product datasheets, policy documents,
   certificates, and tender documents.
 - Call a Groq chat model when configured, with Ollama as a fallback.
+- Index Word policy documents in Qdrant and answer questions from retrieved
+  policy excerpts with source filenames.
 - Run tests for LLM provider selection and fallback behavior.
 
 ## Technology
@@ -111,6 +113,33 @@ request fails, it reports the error and tries Ollama. The default local model
 is `llama3.2:1b`; set `OLLAMA_MODEL` to use another model already installed in
 Ollama.
 
+## Policy RAG
+
+The policy RAG flow embeds the Word files in `data/policies/` locally with
+`BAAI/bge-small-en-v1.5` and stores source-aware chunks in the
+`technest_policies` Qdrant collection. The first run downloads the embedding
+model if it is not already cached. Re-running the index command updates changed
+documents without accumulating duplicate or stale chunks:
+
+```powershell
+docker compose up -d qdrant
+.\.venv\Scripts\python.exe .\policy_rag.py index
+```
+
+Ask questions using Groq when `GROQ_API_KEY` is set, with Ollama as fallback;
+otherwise Ollama is used directly. Ollama must be running with the configured
+`OLLAMA_MODEL` installed. The RAG flow answers only from highly relevant policy
+excerpts, cites source filenames, and abstains before calling the chat model
+when no sufficiently relevant policy match is found:
+
+```powershell
+ollama pull llama3.2:1b
+.\.venv\Scripts\python.exe .\policy_rag.py ask "What is the hardware warranty?"
+```
+
+Configuration overrides: `POLICY_EMBEDDING_MODEL`, `QDRANT_URL`, and
+`POLICY_COLLECTION`.
+
 ## Run tests
 
 ```powershell
@@ -125,6 +154,7 @@ Ollama.
 ├── tests/                # Automated tests
 ├── docker-compose.yml    # Local PostgreSQL, Qdrant, and Mailpit services
 ├── first_llm_call.py     # Groq/Ollama connectivity example
+├── policy_rag.py         # Policy indexing and retrieval-augmented answers
 ├── requirements.txt      # Python dependencies
 └── seed_data.py          # Sample data and database seeding
 ```
