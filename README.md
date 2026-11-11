@@ -1,5 +1,14 @@
 # TechNest Assist
 
+![TechNest Assist banner](assets/technest-banner.png)
+
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Vector%20Database-DC244C?logo=qdrant&logoColor=white)](https://qdrant.tech/)
+[![Groq](https://img.shields.io/badge/Groq-LLM%20API-F55036)](https://groq.com/)
+[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-111111)](https://ollama.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+
 TechNest Assist is a prototype AI assistant for a technology retailer. The
 repository currently contains a repeatable sample-data generator and a small
 LLM connectivity example using Groq with local Ollama fallback.
@@ -48,10 +57,7 @@ flowchart TD
     class product,agents,ui,email planned
 ```
 
-The first three milestones are implemented. The next step is to verify the
-workflow on the user's setup and test Groq. The order of the later milestones
-is intentionally undecided; we'll break implementation into day-by-day steps
-before starting each one.
+The first three milestones are implemented.
 
 ## Technology
 
