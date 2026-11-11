@@ -48,10 +48,7 @@ flowchart TD
     class product,agents,ui,email planned
 ```
 
-The first three milestones are implemented. The next step is to verify the
-workflow on the user's setup and test Groq. The order of the later milestones
-is intentionally undecided; we'll break implementation into day-by-day steps
-before starting each one.
+The first three milestones are implemented.
 
 ## Technology
 
