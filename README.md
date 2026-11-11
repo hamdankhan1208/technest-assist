@@ -18,6 +18,41 @@ LLM connectivity example using Groq with local Ollama fallback.
   policy excerpts with source filenames.
 - Run tests for LLM provider selection and fallback behavior.
 
+## Milestone roadmap
+
+```mermaid
+flowchart TD
+    foundation["1. Project foundation<br/>Docker services and sample data"]
+    llm["2. LLM connectivity<br/>Groq with Ollama fallback"]
+    rag["3. Policy RAG<br/>Qdrant retrieval, citations, and abstention"]
+    validation["Next: confirm setup and test Groq"]
+
+    subgraph later["Later milestones — order to be decided"]
+        product["Product data and SQL"]
+        agents["Support agents and workflows"]
+        ui["Customer support UI"]
+        email["Email integration"]
+    end
+
+    foundation --> llm --> rag --> validation
+    validation -.-> product
+    validation -.-> agents
+    validation -.-> ui
+    validation -.-> email
+
+    classDef done fill:#d9f2e6,stroke:#27824b,color:#123b25
+    classDef next fill:#fff1cc,stroke:#b77900,color:#4a3100
+    classDef planned fill:#e9e7ff,stroke:#6554a4,color:#292047
+    class foundation,llm,rag done
+    class validation next
+    class product,agents,ui,email planned
+```
+
+The first three milestones are implemented. The next step is to verify the
+workflow on the user's setup and test Groq. The order of the later milestones
+is intentionally undecided; we'll break implementation into day-by-day steps
+before starting each one.
+
 ## Technology
 
 - Python
