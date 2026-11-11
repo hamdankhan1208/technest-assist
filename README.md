@@ -1,4 +1,3 @@
-# TechNest Assist
 
 ![TechNest Assist banner](assets/technest-banner.png)
 
