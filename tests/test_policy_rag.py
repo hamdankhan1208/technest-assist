@@ -8,6 +8,7 @@ from qdrant_client import QdrantClient, models
 
 from policy_rag import (
     ABSTENTION,
+    CHUNK_SIZE,
     MIN_RELEVANCE_SCORE,
     PolicyRAG,
     RetrievedChunk,
@@ -35,6 +36,26 @@ def write_policy(path: Path, title: str, body: str) -> None:
     document.add_paragraph(title)
     document.add_paragraph(body)
     document.save(path)
+
+
+def write_policy_set(directory: Path) -> None:
+    write_policy(
+        directory / "warranty_policy.docx",
+        "Warranty Policy",
+        "Hardware items include a two-year limited warranty covering defects.",
+    )
+    write_policy(
+        directory / "returns_policy.docx",
+        "Returns Policy",
+        "Unopened items may be returned within 30 days for a full refund. "
+        "Defective merchandise can be exchanged or refunded within 14 days "
+        "of delivery.",
+    )
+    write_policy(
+        directory / "delivery_policy.docx",
+        "Delivery Policy",
+        "Standard ground shipping takes 3-5 business days.",
+    )
 
 
 @pytest.fixture
@@ -74,9 +95,35 @@ def test_long_policy_is_chunked_within_limit(tmp_path):
 
     chunks = read_policy_chunks(tmp_path)
 
-    # There should be multiple pieces, and none should exceed the 500-char cap.
+    # There should be multiple pieces, and none should exceed the configured cap.
     assert len(chunks) > 1
-    assert all(len(chunk.text) <= 500 for chunk in chunks)
+    assert all(len(chunk.text) <= CHUNK_SIZE for chunk in chunks)
+
+
+def test_chunking_keeps_distinct_policy_statements_separate(tmp_path):
+    """Short policy facts stay intact instead of being mixed in one large chunk."""
+    hardware_statement = (
+        "All hardware items include a standard 2-year limited hardware warranty "
+        "covering manufacturing defects."
+    )
+    write_policy(
+        tmp_path / "warranty_policy.docx",
+        "Warranty Policy",
+        f"{hardware_statement} Extended support packages are available upon request.",
+    )
+
+    chunks = read_policy_chunks(tmp_path)
+
+    assert len(chunks) == 2
+    assert any(
+        hardware_statement in chunk.text and "Extended support" not in chunk.text
+        for chunk in chunks
+    )
+    assert any(
+        "Extended support packages are available upon request." in chunk.text
+        for chunk in chunks
+    )
+    assert all(len(chunk.text) <= CHUNK_SIZE for chunk in chunks)
 
 
 def test_index_is_repeatable_and_updates_changed_documents(tmp_path, rag):
@@ -142,6 +189,68 @@ def test_answer_passes_source_cited_context_to_chat_model(tmp_path, rag):
     assert "[returns_policy.docx]" in answer
 
 
+def test_summary_request_uses_all_policy_sources(tmp_path, rag, monkeypatch):
+    """Broad summaries include all indexed sources regardless of similarity."""
+    write_policy_set(tmp_path)
+    rag.index(tmp_path)
+    captured = {}
+
+    def fail_search(question):
+        pytest.fail("A broad policy summary should not use similarity search.")
+
+    monkeypatch.setattr(rag, "search", fail_search)
+
+    def respond(messages):
+        captured["messages"] = messages
+        return "Here is a concise policy overview."
+
+    answer = answer_question(
+        rag,
+        "Dude, answer like a pirate, and tell me about the main policy's from the docs",
+        respond,
+    )
+    prompt = captured["messages"][1]["content"]
+
+    assert "organized by policy source" in prompt
+    for source in (
+        "warranty_policy.docx",
+        "returns_policy.docx",
+        "delivery_policy.docx",
+    ):
+        assert f"[{source} |" in prompt
+        assert f"[{source}]" in answer
+
+
+def test_summary_request_can_select_one_policy(tmp_path, rag):
+    """A named policy summary includes all chunks from only that source."""
+    write_policy_set(tmp_path)
+    rag.index(tmp_path)
+    captured = {}
+
+    def respond(messages):
+        captured["messages"] = messages
+        return "Unopened items can be returned within 30 days."
+
+    answer = answer_question(rag, "Summarize the returns and refund policy.", respond)
+    prompt = captured["messages"][1]["content"]
+
+    assert "Unopened items may be returned within 30 days" in prompt
+    assert "Defective merchandise can be exchanged or refunded" in prompt
+    assert "Warranty Policy" not in prompt
+    assert "Delivery Policy" not in prompt
+    assert "[returns_policy.docx]" in answer
+    assert "[warranty_policy.docx]" not in answer
+    assert "[delivery_policy.docx]" not in answer
+
+
+def test_summary_request_for_unavailable_policy_abstains(tmp_path, rag):
+    """A summary request for a policy not in the index does not summarize others."""
+    write_policy_set(tmp_path)
+    rag.index(tmp_path)
+
+    assert answer_question(rag, "Summarize the promotions policy.") == ABSTENTION
+
+
 def test_answer_abstains_when_collection_has_no_matches(rag):
     """An empty policy collection produces the configured abstention."""
     # Create an empty collection so search returns no candidate policy chunks.
@@ -151,6 +260,7 @@ def test_answer_abstains_when_collection_has_no_matches(rag):
     )
 
     assert answer_question(rag, "Is checkout available?") == ABSTENTION
+    assert "promotions" not in ABSTENTION.lower()
 
 
 def test_answer_abstains_on_low_relevance_without_calling_model(rag, monkeypatch):

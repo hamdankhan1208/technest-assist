@@ -168,13 +168,18 @@ docker compose up -d qdrant
 
 Ask questions using Groq when `GROQ_API_KEY` is set, with Ollama as fallback;
 otherwise Ollama is used directly. Ollama must be running with the configured
-`OLLAMA_MODEL` installed. The RAG flow answers only from highly relevant policy
-excerpts, cites source filenames, and abstains before calling the chat model
-when no sufficiently relevant policy match is found:
+`OLLAMA_MODEL` installed. Factual questions use the top three policy matches
+that meet the relevance threshold and abstain if none do. Explicit policy
+summary requests instead use all indexed policy chunks, or only the chunks for
+a named policy, and ask for a source-cited overview. A summary request for a
+policy that is not indexed abstains.
+For policy summaries, tone requests can change the presentation while factual
+claims should remain supported by the indexed excerpts and cite their sources.
 
 ```powershell
 ollama pull llama3.2:1b
 .\.venv\Scripts\python.exe .\policy_rag.py ask "What is the hardware warranty?"
+.\.venv\Scripts\python.exe .\policy_rag.py ask "Summarize the main policies in the documents."
 ```
 
 Configuration overrides: `POLICY_EMBEDDING_MODEL`, `QDRANT_URL`, and

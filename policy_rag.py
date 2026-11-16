@@ -22,12 +22,38 @@ EMBEDDING_MODEL = os.getenv("POLICY_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 COLLECTION_NAME = os.getenv("POLICY_COLLECTION", "technest_policies")
 # Chunks are limited by characters for this small first version of the RAG flow.
-CHUNK_SIZE = 500
+CHUNK_SIZE = 145
 # This is a similarity score cutoff, not a percent or a confidence probability.
 MIN_RELEVANCE_SCORE = 0.70
 # BGE recommends this instruction at the start of search queries.
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
-ABSTENTION = "The available policy documents do not provide an answer to that question. Please contact customer support for queries related to any potential promotions."
+ABSTENTION = (
+    "The available policy documents do not provide an answer to that question. "
+    "Please contact customer support for further assistance."
+)
+POLICY_SUMMARY_INTENT = re.compile(
+    r"\b(?:summari[sz](?:e|es|ed|ing|ation)?|summary|overview|"
+    r"tell\s+me\s+about|main\s+polic(?:y|ies))\b",
+    re.IGNORECASE,
+)
+POLICY_REFERENCE = re.compile(r"\b(?:polic(?:y|ies)|docs?|documents?)\b", re.I)
+POLICY_SUMMARY_ALIASES = {
+    "warranty": {"warranty"},
+    "returns": {"return", "returns", "refund", "refunds"},
+    "delivery": {"delivery", "shipping", "ship"},
+}
+ALL_POLICY_SUMMARY_TERMS = {
+    "all",
+    "main",
+    "overall",
+    "each",
+    "every",
+    "policies",
+    "doc",
+    "docs",
+    "document",
+    "documents",
+}
 # This instruction is sent to the chat model along with the retrieved policy text.
 SYSTEM_PROMPT = (
     "You are TechNest customer support. Answer only from the supplied policy "
@@ -251,6 +277,30 @@ class PolicyRAG:
             if offset is None:
                 return points
 
+    def get_all_chunks(self) -> list[PolicyChunk]:
+        """Return every indexed policy chunk in stable source order."""
+        collections = {
+            collection.name for collection in self.client.get_collections().collections
+        }
+        if self.collection_name not in collections:
+            raise RuntimeError(
+                f"Policy collection {self.collection_name!r} is missing; "
+                "run the index command first."
+            )
+
+        chunks = [
+            PolicyChunk(
+                source=point.payload["source"],
+                section_id=point.payload["section_id"],
+                text=point.payload["text"],
+            )
+            for point in self._scroll_points()
+            if point.payload
+        ]
+        return sorted(
+            chunks, key=lambda chunk: (chunk.source, chunk.section_id, chunk.text)
+        )
+
     def index(self, directory: Path = POLICY_DIRECTORY) -> int:
         """Embed policy chunks and remove obsolete points from the collection."""
         # First turn the Word documents into plain text pieces with source labels.
@@ -355,26 +405,73 @@ class PolicyRAG:
         ]
 
 
+def _is_policy_summary_request(question: str) -> bool:
+    """Identify explicit policy summaries so they do not depend on similarity."""
+    terms = set(re.findall(r"[a-z]+", question.lower()))
+    mentions_policy = POLICY_REFERENCE.search(question) or any(
+        terms.intersection(aliases) for aliases in POLICY_SUMMARY_ALIASES.values()
+    )
+    return bool(POLICY_SUMMARY_INTENT.search(question) and mentions_policy)
+
+
+def _select_summary_chunks(
+    question: str, chunks: Sequence[PolicyChunk]
+) -> list[PolicyChunk]:
+    """Select named policy sources, or all sources for an overview request."""
+    terms = set(re.findall(r"[a-z]+", question.lower()))
+    selected_policies = {
+        policy
+        for policy, aliases in POLICY_SUMMARY_ALIASES.items()
+        if terms.intersection(aliases)
+    }
+    if not selected_policies:
+        if terms.intersection(ALL_POLICY_SUMMARY_TERMS):
+            return list(chunks)
+        return []
+
+    return [
+        chunk
+        for chunk in chunks
+        if any(
+            set(re.findall(r"[a-z]+", chunk.source.lower())).intersection(
+                POLICY_SUMMARY_ALIASES[policy]
+            )
+            for policy in selected_policies
+        )
+    ]
+
+
 def answer_question(
     rag: PolicyRAG,
     question: str,
     response_generator: Callable[[Sequence[dict[str, str]]], str] = generate_response,
 ) -> str:
-    # First retrieve candidates; then only send strong matches to the chat model.
-    results = rag.search(question)
-    # Similarity scores are not probabilities; this cutoff prevents weak
-    # matches from being presented to the model as evidence.
-    relevant_results = [
-        result for result in results if result.score >= MIN_RELEVANCE_SCORE
-    ]
-    if not relevant_results:
-        # Do not let the model guess if retrieval did not find useful policy text.
+    summary_request = _is_policy_summary_request(question)
+    if summary_request:
+        chunks = _select_summary_chunks(question, rag.get_all_chunks())
+        context = [(chunk.source, chunk.section_id, chunk.text) for chunk in chunks]
+    else:
+        # Fact questions retain the existing top-three relevance-filtered search.
+        results = rag.search(question)
+        context = [
+            (result.source, result.section_id, result.text)
+            for result in results
+            if result.score >= MIN_RELEVANCE_SCORE
+        ]
+
+    if not context:
+        # Do not let the model guess if retrieval found no relevant policy text.
         return ABSTENTION
 
     # Include source/section labels beside the text so the model can cite evidence.
     excerpts = "\n\n".join(
-        f"[{result.source} | {result.section_id}]\n{result.text}"
-        for result in relevant_results
+        f"[{source} | {section_id}]\n{text}" for source, section_id, text in context
+    )
+    summary_instruction = (
+        "Give a concise overview organized by policy source, and cite the exact "
+        "source filename for each policy.\n\n"
+        if summary_request
+        else ""
     )
     messages = [
         # System instructions set the rules; user content contains the question/data.
@@ -382,7 +479,9 @@ def answer_question(
         {
             "role": "user",
             "content": (
-                f"Customer question: {question}\n\n" f"Policy excerpts:\n{excerpts}"
+                f"Customer question: {question}\n\n"
+                f"{summary_instruction}"
+                f"Policy excerpts:\n{excerpts}"
             ),
         },
     ]
@@ -394,11 +493,7 @@ def answer_question(
     # This guarantees a filename is shown, but it does not prove each sentence is
     # factually supported; the model still needs to follow the grounding prompt.
     missing_sources = list(
-        dict.fromkeys(
-            result.source
-            for result in relevant_results
-            if f"[{result.source}]" not in answer
-        )
+        dict.fromkeys(source for source, _, _ in context if f"[{source}]" not in answer)
     )
     if missing_sources:
         citations = ", ".join(f"[{source}]" for source in missing_sources)
