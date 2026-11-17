@@ -8,7 +8,7 @@
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-111111)](https://ollama.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-TechNest Assist is a prototype AI assistant for a technology retailer. The
+TechNest Assist is a prototype AI assistant for a fictional technology retailer. The
 repository currently contains a repeatable sample-data generator and a small
 LLM connectivity example using Groq with local Ollama fallback.
 
