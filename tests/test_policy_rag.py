@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from fpdf import FPDF, XPos, YPos
 import httpx
 import pytest
 from docx import Document
@@ -158,6 +159,44 @@ def test_search_uses_local_embedding_and_returns_sources(tmp_path, rag):
 
     assert result[0].source == "warranty_policy.docx"
     assert "two-year" in result[0].text
+
+
+def test_index_can_include_pdf_datasheets(tmp_path, rag):
+    """PDF datasheets can be indexed in the same retrieval store as policy docs."""
+    write_policy_set(tmp_path)
+    pdf_dir = tmp_path.parent / "pdfs"
+    pdf_dir.mkdir(exist_ok=True)
+    pdf_path = pdf_dir / "TN-LAP-0001.pdf"
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.cell(
+        200,
+        10,
+        "TechNest Product Datasheet",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
+    pdf.cell(
+        200,
+        10,
+        "Product Code: TN-LAP-0001",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
+    pdf.multi_cell(180, 10, "Battery life up to 15 hours. Durable aluminum chassis.")
+    pdf.output(str(pdf_path))
+
+    count = rag.index(tmp_path, include_pdfs=True)
+
+    assert count >= 4
+    assert rag.client.count("test_policies").count >= 4
+    indexed_sources = {
+        point.payload["source"]
+        for point in rag._scroll_points()
+        if point.payload
+    }
+    assert "TN-LAP-0001.pdf" in indexed_sources
 
 
 def test_answer_passes_source_cited_context_to_chat_model(tmp_path, rag):

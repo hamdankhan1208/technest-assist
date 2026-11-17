@@ -12,12 +12,14 @@ from typing import Callable, Iterable, Sequence
 from docx import Document
 import httpx
 from ollama import ResponseError, list as list_ollama_models
+from pypdf import PdfReader
 from qdrant_client import QdrantClient, models
 
 from first_llm_call import OLLAMA_MODEL, generate_response
 
 # Keep settings here so they can be changed without editing the main logic.
 POLICY_DIRECTORY = Path(__file__).parent / "data" / "policies"
+PDF_DIRECTORY = Path(__file__).parent / "data" / "pdfs"
 EMBEDDING_MODEL = os.getenv("POLICY_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 COLLECTION_NAME = os.getenv("POLICY_COLLECTION", "technest_policies")
@@ -137,66 +139,129 @@ def _chunk_text(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
-def read_policy_chunks(directory: Path = POLICY_DIRECTORY) -> list[PolicyChunk]:
-    """Extract text from each policy and retain its filename and section."""
-    chunks = []
-    # Sorting makes processing order predictable between runs.
-    for path in sorted(directory.glob("*.docx")):
-        # Read non-empty paragraphs and keep the Word style to spot section headings.
-        paragraphs = [
-            (paragraph.text.strip(), paragraph.style.name if paragraph.style else "")
-            for paragraph in Document(path).paragraphs
-            if paragraph.text.strip()
-        ]
-        if not paragraphs:
-            continue
+def _read_docx_chunks(path: Path) -> list[PolicyChunk]:
+    """Extract text from a DOCX policy and retain its filename and section."""
+    paragraphs = [
+        (paragraph.text.strip(), paragraph.style.name if paragraph.style else "")
+        for paragraph in Document(path).paragraphs
+        if paragraph.text.strip()
+    ]
+    if not paragraphs:
+        return []
 
-        title = paragraphs[0][0]
-        section = title
-        body = []
+    title = paragraphs[0][0]
+    section = title
+    body: list[str] = []
+    chunks: list[PolicyChunk] = []
 
-        def flush_section() -> None:
-            # Include the document title in every chunk so it remains clear
-            # when a section is retrieved without its neighboring content.
-            if not body:
-                return
-            # Reserve room for the title/heading because this prefix is added to
-            # every text chunk before sending it to the embedding model.
-            prefix = title if section == title else f"{title}\n{section}"
-            available_chars = CHUNK_SIZE - len(prefix) - 1
-            if available_chars <= 0:
-                raise ValueError(
-                    f"Policy title or section is too long in {path.name}: {section}"
-                )
-            for text in _chunk_text(" ".join(body), available_chars):
-                chunks.append(
-                    PolicyChunk(
-                        source=path.name,
-                        section_id=_section_id(section),
-                        text=f"{prefix}\n{text}",
-                    )
-                )
-            # The next heading starts a new section, so it gets its own body.
-            body.clear()
-
-        for text, style_name in paragraphs[1:]:
-            if style_name.lower().startswith("heading"):
-                # Save paragraphs collected under the previous heading first.
-                flush_section()
-                section = text
-            else:
-                body.append(text)
-        flush_section()
-
-        if not any(chunk.source == path.name for chunk in chunks):
-            # Retain a title-only chunk for an otherwise empty policy file.
+    def flush_section() -> None:
+        if not body:
+            return
+        prefix = title if section == title else f"{title}\n{section}"
+        available_chars = CHUNK_SIZE - len(prefix) - 1
+        if available_chars <= 0:
+            raise ValueError(
+                f"Policy title or section is too long in {path.name}: {section}"
+            )
+        for text in _chunk_text(" ".join(body), available_chars):
             chunks.append(
                 PolicyChunk(
                     source=path.name,
-                    section_id=_section_id(title),
-                    text=title,
+                    section_id=_section_id(section),
+                    text=f"{prefix}\n{text}",
                 )
             )
+        body.clear()
+
+    for text, style_name in paragraphs[1:]:
+        if style_name.lower().startswith("heading"):
+            flush_section()
+            section = text
+        else:
+            body.append(text)
+    flush_section()
+
+    if not any(chunk.source == path.name for chunk in chunks):
+        chunks.append(
+            PolicyChunk(
+                source=path.name,
+                section_id=_section_id(title),
+                text=title,
+            )
+        )
+    return chunks
+
+
+def _read_pdf_chunks(path: Path) -> list[PolicyChunk]:
+    """Extract text from a PDF datasheet/spec document into policy-like chunks."""
+    reader = PdfReader(str(path))
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+    if not text.strip():
+        return []
+
+    title = path.stem.replace("_", " ").strip() or path.name
+    section = title
+    chunks: list[PolicyChunk] = []
+    lines = [line.strip() for line in re.split(r"\n+", text) if line.strip()]
+    body: list[str] = []
+    for line in lines:
+        if len(line) < 100 and line.lower().endswith((":", "-")):
+            if body:
+                prefix = title if section == title else f"{title}\n{section}"
+                available_chars = CHUNK_SIZE - len(prefix) - 1
+                if available_chars <= 0:
+                    raise ValueError(
+                        f"PDF title or section is too long in {path.name}: {section}"
+                    )
+                for chunk_text in _chunk_text(" ".join(body), available_chars):
+                    chunks.append(
+                        PolicyChunk(
+                            source=path.name,
+                            section_id=_section_id(section),
+                            text=f"{prefix}\n{chunk_text}",
+                        )
+                    )
+                body = []
+            section = line.rstrip(":-")
+        else:
+            body.append(line)
+
+    if body:
+        prefix = title if section == title else f"{title}\n{section}"
+        available_chars = CHUNK_SIZE - len(prefix) - 1
+        if available_chars <= 0:
+            raise ValueError(
+                f"PDF title or section is too long in {path.name}: {section}"
+            )
+        for chunk_text in _chunk_text(" ".join(body), available_chars):
+            chunks.append(
+                PolicyChunk(
+                    source=path.name,
+                    section_id=_section_id(section),
+                    text=f"{prefix}\n{chunk_text}",
+                )
+            )
+
+    if not chunks:
+        chunks.append(
+            PolicyChunk(
+                source=path.name,
+                section_id=_section_id(title),
+                text=title,
+            )
+        )
+    return chunks
+
+
+def read_policy_chunks(directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False) -> list[PolicyChunk]:
+    """Extract text from each policy and optionally include PDF datasheets/specs."""
+    chunks: list[PolicyChunk] = []
+    for path in sorted(directory.glob("*.docx")):
+        chunks.extend(_read_docx_chunks(path))
+    if include_pdfs:
+        pdf_dir = directory.parent / "pdfs"
+        for path in sorted(pdf_dir.glob("*.pdf")):
+            chunks.extend(_read_pdf_chunks(path))
     return chunks
 
 
@@ -301,11 +366,15 @@ class PolicyRAG:
             chunks, key=lambda chunk: (chunk.source, chunk.section_id, chunk.text)
         )
 
-    def index(self, directory: Path = POLICY_DIRECTORY) -> int:
+    def index(self, directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False) -> int:
         """Embed policy chunks and remove obsolete points from the collection."""
-        # First turn the Word documents into plain text pieces with source labels.
-        chunks = read_policy_chunks(directory)
+        # First turn the policy documents into plain text pieces with source labels.
+        chunks = read_policy_chunks(directory, include_pdfs=include_pdfs)
         if not chunks:
+            if include_pdfs:
+                raise ValueError(
+                    f"No policy or PDF documents found in {directory} or {directory.parent / 'pdfs'}."
+                )
             raise ValueError(f"No Word policy documents found in {directory}.")
 
         self._ensure_collection()
@@ -540,7 +609,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     #   python policy_rag.py ask "What is the warranty?"
     parser = argparse.ArgumentParser(description="Index and query TechNest policies.")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("index", help="Index Word policy files in Qdrant.")
+    index_parser = subparsers.add_parser(
+        "index", help="Index policy files and optional PDF datasheets in Qdrant."
+    )
+    index_parser.add_argument(
+        "--include-pdfs",
+        action="store_true",
+        help="Include generated product datasheets and PDF specs in the index.",
+    )
     ask_parser = subparsers.add_parser("ask", help="Ask a policy-grounded question.")
     ask_parser.add_argument("question")
     args = parser.parse_args(argv)
@@ -548,7 +624,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     rag = _build_rag()
     try:
         if args.command == "index":
-            count = rag.index()
+            count = rag.index(include_pdfs=args.include_pdfs)
             print(f"Indexed {count} policy chunks in {COLLECTION_NAME}.")
             return 0
 

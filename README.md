@@ -157,13 +157,16 @@ Ollama.
 
 The policy RAG flow embeds the Word files in `data/policies/` locally with
 `BAAI/bge-small-en-v1.5` and stores source-aware chunks in the
-`technest_policies` Qdrant collection. The first run downloads the embedding
-model if it is not already cached. Re-running the index command updates changed
-documents without accumulating duplicate or stale chunks:
+`technest_policies` Qdrant collection. If you also want generated product
+specs and datasheets in `data/pdfs/` included, use the optional
+`--include-pdfs` flag. The first run downloads the embedding model if it is
+not already cached. Re-running the index command updates changed documents
+without accumulating duplicate or stale chunks:
 
 ```powershell
 docker compose up -d qdrant
 .\.venv\Scripts\python.exe .\policy_rag.py index
+.\.venv\Scripts\python.exe .\policy_rag.py index --include-pdfs
 ```
 
 Ask questions using Groq when `GROQ_API_KEY` is set, with Ollama as fallback;
