@@ -62,7 +62,12 @@ SYSTEM_PROMPT = (
     "excerpts. If they do not contain the answer, say that the policy documents "
     "do not provide it. Do not invent or infer policy details. Cite each factual "
     "answer using the exact source filename in square brackets, not the section "
-    "identifier."
+    "identifier. Keep time limits attached to the exact condition stated in the "
+    "excerpt. Do not combine a period from one return type with another, and do "
+    "not add reporting, notice, eligibility, or approval requirements that the "
+    "excerpt does not state. An unopened-item rule does not apply to opened items "
+    "unless the excerpt says so. A defective-merchandise rule does not imply the "
+    "30-day unopened-item period."
 )
 
 
@@ -77,10 +82,10 @@ class PolicyChunk:
 @dataclass(frozen=True)
 class RetrievedChunk:
     # Search results also include a score, which we use to filter weak matches.
-    source: str     #       |
-    section_id: str #      |
-    text: str    #        |
-    score: float # <------
+    source: str  #       |
+    section_id: str  #      |
+    text: str  #        |
+    score: float  # <------
 
 
 def _section_id(text: str) -> str:
@@ -253,7 +258,9 @@ def _read_pdf_chunks(path: Path) -> list[PolicyChunk]:
     return chunks
 
 
-def read_policy_chunks(directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False) -> list[PolicyChunk]:
+def read_policy_chunks(
+    directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False
+) -> list[PolicyChunk]:
     """Extract text from each policy and optionally include PDF datasheets/specs."""
     chunks: list[PolicyChunk] = []
     for path in sorted(directory.glob("*.docx")):
@@ -366,7 +373,9 @@ class PolicyRAG:
             chunks, key=lambda chunk: (chunk.source, chunk.section_id, chunk.text)
         )
 
-    def index(self, directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False) -> int:
+    def index(
+        self, directory: Path = POLICY_DIRECTORY, include_pdfs: bool = False
+    ) -> int:
         """Embed policy chunks and remove obsolete points from the collection."""
         # First turn the policy documents into plain text pieces with source labels.
         chunks = read_policy_chunks(directory, include_pdfs=include_pdfs)

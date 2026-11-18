@@ -16,6 +16,14 @@ from policy_rag import (
     answer_question,
     read_policy_chunks,
 )
+from rag_evaluation import (
+    EvaluationCase,
+    EvaluationSummary,
+    format_evaluation_summary,
+    run_evaluation,
+    summarize_evaluation,
+)
+from rag_evaluation_cases import EVALUATION_CASES
 
 
 class FakeEmbedder:
@@ -192,9 +200,7 @@ def test_index_can_include_pdf_datasheets(tmp_path, rag):
     assert count >= 4
     assert rag.client.count("test_policies").count >= 4
     indexed_sources = {
-        point.payload["source"]
-        for point in rag._scroll_points()
-        if point.payload
+        point.payload["source"] for point in rag._scroll_points() if point.payload
     }
     assert "TN-LAP-0001.pdf" in indexed_sources
 
@@ -222,6 +228,8 @@ def test_answer_passes_source_cited_context_to_chat_model(tmp_path, rag):
     assert (
         "only from the supplied policy excerpts" in captured["messages"][0]["content"]
     )
+    assert "Do not combine a period" in captured["messages"][0]["content"]
+    assert "do not add reporting" in captured["messages"][0]["content"]
     assert (
         "[returns_policy.docx | returns-policy]" in captured["messages"][1]["content"]
     )
@@ -357,3 +365,174 @@ def test_ollama_fallback_check_requires_configured_model(monkeypatch):
 
     with pytest.raises(RuntimeError, match="is not installed"):
         policy_rag._check_ollama_fallback()
+
+
+def test_evaluation_runner_reports_supported_answer(tmp_path, rag):
+    """The evaluation runner should verify terms, citations, and retrieval."""
+    write_policy(
+        tmp_path / "returns_policy.docx",
+        "Returns Policy",
+        "Unopened items may be returned within 30 days.",
+    )
+    rag.index(tmp_path)
+
+    def respond(messages):
+        return "Unopened items may be returned within 30 days [returns_policy.docx]."
+
+    results = run_evaluation(
+        rag,
+        [
+            EvaluationCase(
+                name="returns window",
+                question="What is the unopened return period?",
+                expected_sources=("returns_policy.docx",),
+                expected_answer_terms=("30 days",),
+            )
+        ],
+        respond,
+    )
+
+    assert len(results) == 1
+    assert results[0].passed
+    assert results[0].retrieved_sources == ("returns_policy.docx",)
+    assert results[0].failures == ()
+
+
+def test_evaluation_runner_reports_abstention_and_empty_case_errors(rag):
+    """The runner should preserve abstention results and reject an empty suite."""
+    rag.client.create_collection(
+        collection_name="test_policies",
+        vectors_config=models.VectorParams(size=3, distance=models.Distance.COSINE),
+    )
+
+    results = run_evaluation(
+        rag,
+        [
+            EvaluationCase(
+                name="unsupported checkout",
+                question="Do you offer checkout promotions?",
+                should_abstain=True,
+            )
+        ],
+    )
+
+    assert results[0].passed
+    assert results[0].answer == ABSTENTION
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        run_evaluation(rag, [])
+
+
+def test_evaluation_case_set_covers_policy_pdf_and_abstention_scenarios():
+    """The named suite should contain a stable, broad set of evaluation cases."""
+    assert len(EVALUATION_CASES) >= 14
+    assert len({case.name for case in EVALUATION_CASES}) == len(EVALUATION_CASES)
+
+    all_sources = {
+        source for case in EVALUATION_CASES for source in case.expected_sources
+    }
+    assert "warranty_policy.docx" in all_sources
+    assert "returns_policy.docx" in all_sources
+    assert "delivery_policy.docx" in all_sources
+    assert "TN-MON-0002.pdf" in all_sources
+
+    abstentions = [case for case in EVALUATION_CASES if case.should_abstain]
+    assert len(abstentions) >= 2
+
+
+def test_evaluation_summary_reports_recall_and_abstention(tmp_path, rag):
+    """Aggregate metrics should distinguish retrieval, citations, and abstention."""
+    write_policy(
+        tmp_path / "returns_policy.docx",
+        "Returns Policy",
+        "Unopened items may be returned within 30 days.",
+    )
+    rag.index(tmp_path)
+
+    def respond(messages):
+        return "Unopened items may be returned within 30 days [returns_policy.docx]."
+
+    original_search = rag.search
+
+    def search_with_abstention(question):
+        if "promotions" in question.lower():
+            return []
+        return original_search(question)
+
+    rag.search = search_with_abstention
+
+    results = run_evaluation(
+        rag,
+        [
+            EvaluationCase(
+                name="supported return",
+                question="When can I return an unopened item?",
+                expected_sources=("returns_policy.docx",),
+                expected_answer_terms=("30 days",),
+            ),
+            EvaluationCase(
+                name="unsupported checkout",
+                question="Do you offer checkout promotions?",
+                should_abstain=True,
+            ),
+        ],
+        respond,
+    )
+    summary = summarize_evaluation(results)
+
+    assert summary.total == 2
+    assert summary.passed >= 1
+    assert summary.retrieval_recall == 1.0
+    assert summary.citation_recall == 1.0
+    assert summary.abstention_accuracy == 1.0
+    assert summary.answer_grounding == 1.0
+
+
+def test_evaluation_rejects_forbidden_answer_claim(tmp_path, rag):
+    """Evaluation should catch unsupported extra claims in a generated answer."""
+    write_policy(
+        tmp_path / "returns_policy.docx",
+        "Returns Policy",
+        "Unopened items may be returned within 30 days. "
+        "Defective merchandise can be refunded within 14 days of delivery.",
+    )
+    rag.index(tmp_path)
+
+    def respond(messages):
+        return "Defective merchandise has 30 days [returns_policy.docx]."
+
+    results = run_evaluation(
+        rag,
+        [
+            EvaluationCase(
+                name="defective period",
+                question="How long is the defective merchandise return period?",
+                expected_sources=("returns_policy.docx",),
+                forbidden_answer_terms=("30 days",),
+            )
+        ],
+        respond,
+    )
+
+    assert not results[0].passed
+    assert "unsupported terms: 30 days" in results[0].failures
+
+
+def test_evaluation_summary_format_is_readable():
+    """The CLI summary should expose all key metrics without extra setup."""
+    summary = EvaluationSummary(
+        total=10,
+        passed=8,
+        retrieval_recall=0.9,
+        citation_recall=0.8,
+        abstention_accuracy=1.0,
+        answer_grounding=0.875,
+    )
+
+    formatted = format_evaluation_summary(summary)
+
+    assert "Cases: 8/10 passed" in formatted
+    assert "Retrieval recall: 90.0%" in formatted
+    assert "Citation recall: 80.0%" in formatted
+    assert "Abstention accuracy: 100.0%" in formatted
+    assert "Answer grounding: 87.5%" in formatted

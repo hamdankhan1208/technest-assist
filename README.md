@@ -188,11 +188,23 @@ ollama pull llama3.2:1b
 Configuration overrides: `POLICY_EMBEDDING_MODEL`, `QDRANT_URL`, and
 `POLICY_COLLECTION`.
 
-## Run tests
+## Run tests and RAG evaluation
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
+
+# Policy-only live evaluation against local Qdrant and Ollama/Groq
+.\.venv\Scripts\python.exe rag_evaluation.py
+
+# Include all generated PDF datasheets
+.\.venv\Scripts\python.exe rag_evaluation.py --include-pdfs
 ```
+
+The evaluation reports retrieval recall, citation recall, abstention accuracy,
+and answer grounding. Passing retrieval and citation checks does not by itself
+prove every sentence is supported; the case suite includes forbidden-answer
+terms for known grounding traps such as mixing unopened and defective return
+periods.
 
 ## Repository layout
 
