@@ -129,7 +129,7 @@ with environment variables if your local database uses different values:
 
 ### Groq
 
-Set your API key in the current PowerShell session, then run the example:
+Set your GROQ API key in the current PowerShell session, then run the example:
 
 ```powershell
 $env:GROQ_API_KEY = "your-groq-api-key"
