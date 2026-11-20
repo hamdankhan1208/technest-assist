@@ -23,8 +23,8 @@ LLM connectivity example using Groq with local Ollama fallback.
   certificates, and tender documents.
 - Call a Groq chat model when configured, with Ollama as a fallback.
 - Index Word policy documents and optionally product PDFs in Qdrant; answer
-  questions with source citations and abstain when the policy evidence is not
-  available. Broad policy summaries exclude product datasheets.
+  questions with source citations and abstain when relevant evidence is
+  unavailable. Broad policy summaries exclude product datasheets.
 - Run automated tests and a named RAG evaluation suite for retrieval, citations,
   abstention, and known answer-grounding traps.
 
@@ -53,6 +53,50 @@ flowchart TD
 The first three milestones are implemented. Product data and SQL/MCP are the
 next planned phase; agent workflows, the review UI, and email integration remain
 future work.
+
+## How policy RAG works
+
+The diagram shows the offline indexing path and what happens for each question.
+Factual questions use relevance-filtered retrieval; explicit policy summaries
+select policy chunks directly. Product PDFs can answer factual product questions
+when indexed, but are left out of broad policy summaries.
+
+```mermaid
+flowchart TD
+    subgraph indexing["Index documents — run when sources change"]
+        docs["Policy DOCX files<br/>Optional product PDFs"] --> extract["Extract text and split into<br/>small source-aware chunks"]
+        extract --> embed["Create local embeddings<br/>BAAI/bge-small-en-v1.5"]
+        embed --> store[("Qdrant<br/>technest_policies")]
+    end
+
+    subgraph answering["Answer a customer question"]
+        question["Customer question"] --> route{"Explicit policy summary?"}
+        route -- Yes --> summary["Select all policy DOCX chunks<br/>or the named policy's chunks"]
+        route -- No --> queryembed["Embed search query"]
+        queryembed --> search["Retrieve top 3 chunks<br/>from Qdrant"]
+        store -. indexed chunks .-> search
+        search --> threshold{"Any result at or above<br/>0.70 relevance threshold?"}
+        threshold -- No --> abstain["Abstain: evidence not found"]
+        threshold -- Yes --> context["Build prompt from question<br/>and source-labeled excerpts"]
+        summary --> context
+        context --> model["Generate grounded answer<br/>Groq, with Ollama fallback"]
+        model --> answer["Answer with exact<br/>source-filename citations"]
+    end
+
+    classDef source fill:#eef4ff,stroke:#4169a1,color:#182b49
+    classDef process fill:#f4f1ff,stroke:#6554a4,color:#292047
+    classDef decision fill:#fff1cc,stroke:#b77900,color:#4a3100
+    classDef result fill:#d9f2e6,stroke:#27824b,color:#123b25
+    class docs,question source
+    class extract,embed,store,queryembed,search,summary,context,model process
+    class route,threshold decision
+    class abstain,answer result
+```
+
+GitHub renders this Mermaid diagram as a static overview. For an interactive,
+step-by-step animation, the diagram would need a separate hosted page; the
+[Ralph project](https://github.com/snarktank/ralph) uses that approach for its
+[interactive flowchart](https://snarktank.github.io/ralph/).
 
 ## Technology
 
