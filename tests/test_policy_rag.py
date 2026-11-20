@@ -237,9 +237,16 @@ def test_answer_passes_source_cited_context_to_chat_model(tmp_path, rag):
 
 
 def test_summary_request_uses_all_policy_sources(tmp_path, rag, monkeypatch):
-    """Broad summaries include all indexed sources regardless of similarity."""
+    """Broad summaries include all policy docs but exclude indexed product PDFs."""
     write_policy_set(tmp_path)
-    rag.index(tmp_path)
+    pdf_dir = tmp_path.parent / "pdfs"
+    pdf_dir.mkdir(exist_ok=True)
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(180, 10, "TechNest Product Datasheet. Product Code: TN-LAP-0001")
+    pdf.output(str(pdf_dir / "TN-LAP-0001.pdf"))
+    rag.index(tmp_path, include_pdfs=True)
     captured = {}
 
     def fail_search(question):
@@ -266,6 +273,7 @@ def test_summary_request_uses_all_policy_sources(tmp_path, rag, monkeypatch):
     ):
         assert f"[{source} |" in prompt
         assert f"[{source}]" in answer
+    assert "TN-LAP-0001.pdf" not in prompt
 
 
 def test_summary_request_can_select_one_policy(tmp_path, rag):

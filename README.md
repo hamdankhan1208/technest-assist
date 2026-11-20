@@ -22,9 +22,11 @@ LLM connectivity example using Groq with local Ollama fallback.
 - Generate sample product records, product datasheets, policy documents,
   certificates, and tender documents.
 - Call a Groq chat model when configured, with Ollama as a fallback.
-- Index Word policy documents in Qdrant and answer questions from retrieved
-  policy excerpts with source filenames.
-- Run tests for LLM provider selection and fallback behavior.
+- Index Word policy documents and optionally product PDFs in Qdrant; answer
+  questions with source citations and abstain when the policy evidence is not
+  available. Broad policy summaries exclude product datasheets.
+- Run automated tests and a named RAG evaluation suite for retrieval, citations,
+  abstention, and known answer-grounding traps.
 
 ## Milestone roadmap
 
@@ -33,30 +35,24 @@ flowchart TD
     foundation["1. Project foundation<br/>Docker services and sample data"]
     llm["2. LLM connectivity<br/>Groq with Ollama fallback"]
     rag["3. Policy RAG<br/>Qdrant retrieval, citations, and abstention"]
-    validation["Next: confirm setup and test Groq"]
+    product["Next: product data and SQL/MCP"]
+    agents["Support agents and workflows"]
+    ui["Human-review support workspace"]
+    email["Email integration"]
 
-    subgraph later["Later milestones — order to be decided"]
-        product["Product data and SQL"]
-        agents["Support agents and workflows"]
-        ui["Customer support UI"]
-        email["Email integration"]
-    end
-
-    foundation --> llm --> rag --> validation
-    validation -.-> product
-    validation -.-> agents
-    validation -.-> ui
-    validation -.-> email
+    foundation --> llm --> rag --> product --> agents --> ui --> email
 
     classDef done fill:#d9f2e6,stroke:#27824b,color:#123b25
     classDef next fill:#fff1cc,stroke:#b77900,color:#4a3100
     classDef planned fill:#e9e7ff,stroke:#6554a4,color:#292047
     class foundation,llm,rag done
-    class validation next
-    class product,agents,ui,email planned
+    class product next
+    class agents,ui,email planned
 ```
 
-The first three milestones are implemented.
+The first three milestones are implemented. Product data and SQL/MCP are the
+next planned phase; agent workflows, the review UI, and email integration remain
+future work.
 
 ## Technology
 

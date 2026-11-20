@@ -495,7 +495,7 @@ def _is_policy_summary_request(question: str) -> bool:
 def _select_summary_chunks(
     question: str, chunks: Sequence[PolicyChunk]
 ) -> list[PolicyChunk]:
-    """Select named policy sources, or all sources for an overview request."""
+    """Select named policy sources, or all policy documents for an overview."""
     terms = set(re.findall(r"[a-z]+", question.lower()))
     selected_policies = {
         policy
@@ -504,7 +504,7 @@ def _select_summary_chunks(
     }
     if not selected_policies:
         if terms.intersection(ALL_POLICY_SUMMARY_TERMS):
-            return list(chunks)
+            return [chunk for chunk in chunks if chunk.source.lower().endswith(".docx")]
         return []
 
     return [
