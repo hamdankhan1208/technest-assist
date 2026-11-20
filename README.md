@@ -93,10 +93,6 @@ flowchart TD
     class abstain,answer result
 ```
 
-GitHub renders this Mermaid diagram as a static overview. For an interactive,
-step-by-step animation, the diagram would need a separate hosted page; the
-[Ralph project](https://github.com/snarktank/ralph) uses that approach for its
-[interactive flowchart](https://snarktank.github.io/ralph/).
 
 ## Technology
 
