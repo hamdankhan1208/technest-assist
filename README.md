@@ -9,18 +9,21 @@
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
 TechNest Assist is a prototype AI assistant for a fictional technology retailer. The
-repository currently contains a repeatable sample-data generator and a small
-LLM connectivity example using Groq with local Ollama fallback.
+repository contains a repeatable sample-data generator, policy-grounded retrieval,
+read-only product lookups, and a small Groq/Ollama LLM connectivity example.
 
-> **Project status:** Policy-grounded retrieval (RAG) is implemented as a
-> command-line milestone. The broader customer-support application is still in
-> development; the standalone LLM example remains a smoke test.
+> **Project status:** Policy-grounded retrieval (RAG) and read-only product
+> lookups are implemented as command-line/code milestones. Agent workflows,
+> human review, and email integration remain in development; the standalone LLM
+> example remains a smoke test.
 
 ## Current capabilities
 
 - Start PostgreSQL, Qdrant, and Mailpit locally with Docker Compose.
 - Generate sample product records, product datasheets, policy documents,
   certificates, and tender documents.
+- Look up products in PostgreSQL by product code, name, or category using
+  read-only, parameterized queries.
 - Call a Groq chat model when configured, with Ollama as a fallback.
 - Index Word policy documents and optionally product PDFs in Qdrant; answer
   questions with source citations and abstain when relevant evidence is
@@ -35,7 +38,7 @@ flowchart TD
     foundation["1. Project foundation<br/>Docker services and sample data"]
     llm["2. LLM connectivity<br/>Groq with Ollama fallback"]
     rag["3. Policy RAG<br/>Qdrant retrieval, citations, and abstention"]
-    product["Next: product data and SQL/MCP"]
+    product["4. Product data<br/>Read-only SQL done; MCP next"]
     agents["Support agents and workflows"]
     ui["Human-review support workspace"]
     email["Email integration"]
@@ -50,9 +53,9 @@ flowchart TD
     class agents,ui,email planned
 ```
 
-The first three milestones are implemented. Product data and SQL/MCP are the
-next planned phase; agent workflows, the review UI, and email integration remain
-future work.
+The first three milestones and the read-only SQL product lookup are implemented.
+MCP exposure is the next product-data step; agent workflows, the review UI, and
+email integration remain future work.
 
 ## How policy RAG works
 
@@ -161,6 +164,18 @@ with environment variables if your local database uses different values:
 | `PGUSER` | `technest_user` |
 | `PGPASSWORD` | `technest_password` |
 
+## Product data lookup
+
+`product_queries.py` provides read-only lookup functions for the seeded
+PostgreSQL `products` table: `get_product_by_code()` for exact catalog codes and
+`search_products()` for name-substring and/or category filters. Results have a
+stable `ProductRecord` shape containing product code, name, category, price,
+and stock quantity. No match returns `None` for a code lookup or an empty tuple
+for a search; invalid input raises `ValueError`, while database errors surface
+to the caller. The functions use parameterized SQL, read-only transactions, and
+the same `PG*` connection settings listed above. MCP tools will call this layer
+in the next milestone rather than implement database access independently.
+
 ## Run the LLM example
 
 ### Groq
@@ -251,6 +266,7 @@ periods.
 ├── docker-compose.yml    # Local PostgreSQL, Qdrant, and Mailpit services
 ├── first_llm_call.py     # Groq/Ollama connectivity example
 ├── policy_rag.py         # Policy indexing and retrieval-augmented answers
+├── product_queries.py    # Read-only PostgreSQL product lookups
 ├── requirements.txt      # Python dependencies
 └── seed_data.py          # Sample data and database seeding
 ```
