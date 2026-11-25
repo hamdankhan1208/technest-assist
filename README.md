@@ -10,10 +10,11 @@
 
 TechNest Assist is a prototype AI assistant for a fictional technology retailer. The
 repository contains a repeatable sample-data generator, policy-grounded retrieval,
-read-only product lookups, and a small Groq/Ollama LLM connectivity example.
+read-only SQL and MCP product/document access, and a small Groq/Ollama LLM
+connectivity example.
 
-> **Project status:** Policy-grounded retrieval (RAG) and read-only product
-> lookups are implemented as command-line/code milestones. Agent workflows,
+> **Project status:** Policy-grounded retrieval (RAG), read-only SQL product
+> lookups, and MCP tool exposure are implemented. Agent workflows,
 > human review, and email integration remain in development; the standalone LLM
 > example remains a smoke test.
 
@@ -24,6 +25,8 @@ read-only product lookups, and a small Groq/Ollama LLM connectivity example.
   certificates, and tender documents.
 - Look up products in PostgreSQL by product code, name, or category using
   read-only, parameterized queries.
+- Expose read-only PostgreSQL and document retrieval through MCP tools:
+  `get_product_by_code`, `search_products`, and `search_documents`.
 - Call a Groq chat model when configured, with Ollama as a fallback.
 - Index Word policy documents and optionally product PDFs in Qdrant; answer
   questions with source citations and abstain when relevant evidence is
@@ -38,7 +41,7 @@ flowchart TD
     foundation["1. Project foundation<br/>Docker services and sample data"]
     llm["2. LLM connectivity<br/>Groq with Ollama fallback"]
     rag["3. Policy RAG<br/>Qdrant retrieval, citations, and abstention"]
-    product["4. Product data<br/>Read-only SQL done; MCP next"]
+    product["4. Product data<br/>Read-only SQL and MCP done"]
     agents["Support agents and workflows"]
     ui["Human-review support workspace"]
     email["Email integration"]
@@ -48,14 +51,13 @@ flowchart TD
     classDef done fill:#d9f2e6,stroke:#27824b,color:#123b25
     classDef next fill:#fff1cc,stroke:#b77900,color:#4a3100
     classDef planned fill:#e9e7ff,stroke:#6554a4,color:#292047
-    class foundation,llm,rag done
-    class product next
+    class foundation,llm,rag,product done
     class agents,ui,email planned
 ```
 
-The first three milestones and the read-only SQL product lookup are implemented.
-MCP exposure is the next product-data step; agent workflows, the review UI, and
-email integration remain future work.
+Policy RAG, read-only SQL product lookup, and read-only MCP exposure are
+implemented. Agent workflows, the review UI, and email integration remain future
+work.
 
 ## How policy RAG works
 
@@ -185,12 +187,30 @@ read-only tools:
 - `search_documents`: existing policy/PDF retrieval with source metadata
 
 The product tools delegate to `product_queries.py`; document retrieval delegates
-to `PolicyRAG.search()` and does not run a chat model or expose mutations. Run
-focused in-process tests with:
+to `PolicyRAG.search()` and does not run a chat model or expose mutations.
+Invalid input and database/vector-store failures are reported as MCP tool
+errors. The implementation uses the installed MCP 2.x `MCPServer` API.
+
+For a stdio MCP client, configure the server command as:
+
+```text
+.\.venv\Scripts\python.exe mcp_server.py
+```
+
+Run from the repository root. The working directory is needed so the server can
+resolve project modules and the indexed document paths. Run focused in-process
+tests with:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/test_mcp_server.py -q
 ```
+
+To test the MCP surfaces with live Compose services, use Docker Compose for
+PostgreSQL and Qdrant first, ensure the policy collection is indexed, then call
+`get_product_by_code`, `search_products`, or `search_documents` through an MCP
+client. The live Wednesday validation covered an exact seeded laptop code, a
+missing code, and a warranty question that returned `warranty_policy.docx`
+source metadata.
 
 ## Run the LLM example
 
@@ -281,6 +301,7 @@ periods.
 ├── tests/                # Automated tests
 ├── docker-compose.yml    # Local PostgreSQL, Qdrant, and Mailpit services
 ├── first_llm_call.py     # Groq/Ollama connectivity example
+├── mcp_server.py         # Read-only product/document MCP tools
 ├── policy_rag.py         # Policy indexing and retrieval-augmented answers
 ├── product_queries.py    # Read-only PostgreSQL product lookups
 ├── requirements.txt      # Python dependencies
