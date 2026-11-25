@@ -32,7 +32,7 @@ pypdf>=4.1.0
 # --- Agent Orchestration & Protocol ---
 langgraph>=0.0.26
 langchain>=0.1.12
-mcp>=0.1.0
+mcp>=2.3.0,<3.0.0
 
 # --- Web Backend & UI ---
 fastapi>=0.110.0

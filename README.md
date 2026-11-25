@@ -173,8 +173,24 @@ stable `ProductRecord` shape containing product code, name, category, price,
 and stock quantity. No match returns `None` for a code lookup or an empty tuple
 for a search; invalid input raises `ValueError`, while database errors surface
 to the caller. The functions use parameterized SQL, read-only transactions, and
-the same `PG*` connection settings listed above. MCP tools will call this layer
-in the next milestone rather than implement database access independently.
+the same `PG*` connection settings listed above.
+
+## MCP server
+
+Run `mcp_server.py` through a stdio MCP client. The server exposes only
+read-only tools:
+
+- `get_product_by_code`: exact catalog-code lookup
+- `search_products`: bounded name/category search
+- `search_documents`: existing policy/PDF retrieval with source metadata
+
+The product tools delegate to `product_queries.py`; document retrieval delegates
+to `PolicyRAG.search()` and does not run a chat model or expose mutations. Run
+focused in-process tests with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_mcp_server.py -q
+```
 
 ## Run the LLM example
 
