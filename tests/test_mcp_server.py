@@ -1,7 +1,9 @@
 import asyncio
 from decimal import Decimal
 
+import psycopg2
 from mcp import Client
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 import mcp_server
 from policy_rag import RetrievedChunk
@@ -101,6 +103,34 @@ def test_search_documents_returns_source_metadata(monkeypatch):
     assert document["section_id"] == "section-1"
     assert document["text"] == "Hardware includes a warranty."
     assert document["score"] == 0.82
+
+
+def test_mcp_reports_database_and_document_service_failures(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server,
+        "get_product_by_code",
+        lambda code: (_ for _ in ()).throw(
+            psycopg2.OperationalError("database unavailable")
+        ),
+    )
+
+    class UnavailableRAG:
+        def search(self, question, limit=3):
+            raise ResponseHandlingException("vector store unavailable")
+
+    server = mcp_server.build_mcp_server(lambda: UnavailableRAG())
+
+    database_result = call_tool(
+        server, "get_product_by_code", {"product_code": "TN-LAP-0001"}
+    )
+    document_result = call_tool(
+        server,
+        "search_documents",
+        {"question": "How long is the warranty?", "limit": 3},
+    )
+
+    assert database_result.is_error is True
+    assert document_result.is_error is True
 
 
 def test_mcp_rejects_malformed_product_and_document_input(monkeypatch):

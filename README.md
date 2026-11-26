@@ -118,6 +118,7 @@ The full `requirements.txt` includes machine-learning packages such as PyTorch
 and sentence-transformers, so the initial installation may take some time and
 disk space.
 
+
 ## Setup
 
 In PowerShell, from the repository root:
@@ -208,9 +209,10 @@ tests with:
 To test the MCP surfaces with live Compose services, use Docker Compose for
 PostgreSQL and Qdrant first, ensure the policy collection is indexed, then call
 `get_product_by_code`, `search_products`, or `search_documents` through an MCP
-client. The live Wednesday validation covered an exact seeded laptop code, a
-missing code, and a warranty question that returned `warranty_policy.docx`
-source metadata.
+client. Live validation returned seeded laptop `TN-LAP-0001` with exact price
+and stock fields, `null` for a missing code, bounded search results, and
+`warranty_policy.docx` source metadata for a warranty question. Database and
+vector-store outages are reported as MCP tool errors rather than silent failures.
 
 ## Run the LLM example
 

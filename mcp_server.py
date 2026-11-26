@@ -7,6 +7,10 @@ from typing import Any
 import psycopg2
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from qdrant_client.http.exceptions import (
+    ResponseHandlingException,
+    UnexpectedResponse,
+)
 
 from policy_rag import PolicyRAG, _build_rag
 from product_queries import (
@@ -87,7 +91,13 @@ def build_mcp_server(rag_factory: Callable[[], PolicyRAG] = _build_rag) -> MCPSe
         try:
             rag = rag_factory()
             results = rag.search(question, limit=limit)
-        except (RuntimeError, ValueError, OSError) as error:
+        except (
+            RuntimeError,
+            ValueError,
+            OSError,
+            ResponseHandlingException,
+            UnexpectedResponse,
+        ) as error:
             raise ToolError(f"Document retrieval failed: {error}") from error
         return [
             {
