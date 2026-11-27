@@ -51,5 +51,5 @@ ragas>=0.1.5
 prometheus-client>=0.20.0
 
 # --- Code Quality & Testing ---
-pytest>=8.1.0
+pytest>=9.2.0
 black>=24.2.0
