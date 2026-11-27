@@ -47,7 +47,7 @@ google-auth-oauthlib>=1.2.0
 
 # --- Observability & Evaluation ---
 langfuse>=2.20.0
-ragas>=0.1.5
+ragas>=0.4.4
 prometheus-client>=0.20.0
 
 # --- Code Quality & Testing ---
