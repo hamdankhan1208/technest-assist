@@ -19,7 +19,7 @@ sqlalchemy>=2.0.28
 # --- Embeddings & Machine Learning ---
 sentence-transformers>=2.5.1
 torch>=2.2.0
-numpy>=1.26.0
+numpy>=2.5.5
 
 # --- File Generation & Parsing ---
 faker>=24.0.0
