@@ -159,7 +159,7 @@ each. It also writes expected tender answers to
 The seed script uses the PostgreSQL settings below by default. Override them
 with environment variables if your local database uses different values:
 
-Seed Data has been included in the repository for development and testing. The generated products are in the `TN-LAP-*`, `TN-MON-*`, and `TN-OFF-*` series.
+> **NOTE:** Seed Data has been included in the repository for development and testing. The generated products are in the `TN-LAP-*`, `TN-MON-*`, and `TN-OFF-*` series.
 
 | Variable | Default |
 | --- | --- |
