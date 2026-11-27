@@ -279,12 +279,24 @@ ollama pull llama3.2:1b
 Configuration overrides: `POLICY_EMBEDDING_MODEL`, `QDRANT_URL`, and
 `POLICY_COLLECTION`.
 
-## Run tests and RAG evaluation
+## Run tests and code checks
+
+Install the development dependencies, including the test and lint tools:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m black --check .
+.\.venv\Scripts\python.exe -m ruff check .
+```
 
-# Policy-only live evaluation against local Qdrant and Ollama/Groq
+GitHub Actions runs these checks on pushes and pull requests. The automated test
+suite uses mocked database calls and in-memory Qdrant, so CI does not require
+Docker services, Ollama, or API keys.
+
+For live RAG evaluation against local Qdrant and Ollama/Groq:
+
+```powershell
 .\.venv\Scripts\python.exe rag_evaluation.py
 
 # Include all generated PDF datasheets
