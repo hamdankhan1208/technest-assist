@@ -1,5 +1,5 @@
 # Test-suite dependencies and quality tools; excludes unused ML/runtime packages.
-pytest>=8.1.0
+pytest>=9.2.0
 black>=24.2.0
 ruff>=0.11.0
 psycopg2-binary>=2.9.9
